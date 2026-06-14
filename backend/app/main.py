@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import ocr_router
+from app.routers import ocr_router, collection_router
 
 app = FastAPI(title="古籍数字化OCR与标注平台", version="1.0.0")
 
@@ -12,6 +12,7 @@ app.add_middleware(
 )
 
 app.include_router(ocr_router.router, prefix="/api")
+app.include_router(collection_router.router, prefix="/api")
 
 
 @app.get("/api/health")
