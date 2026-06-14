@@ -31,6 +31,13 @@
           加载示例文档
         </button>
 
+        <div class="text-xs text-gray-500 -mt-1">
+          <span v-if="collectionStore.currentCollection" class="text-amber-400">
+            当前专题：{{ collectionStore.currentCollection.name }}
+          </span>
+          <span v-else>提示：先去专题合集创建并选中专题，再回来加文档</span>
+        </div>
+
         <!-- Search -->
         <div>
           <input v-model="store.searchQuery" @input="store.searchInDocuments(store.searchQuery)"
@@ -50,12 +57,14 @@
             :class="store.currentDoc?.id === d.id ? 'ring-1 ring-amber-500' : ''">
             <div class="flex justify-between items-start">
               <span class="truncate">{{ d.name }}</span>
-              <button v-if="collectionStore.currentCollection && !isDocInCurrentCollection(d.id)"
-                @click.stop="addToCollection(d.id)"
-                class="text-xs text-green-400 hover:text-green-300 opacity-0 group-hover:opacity-100 ml-1 flex-shrink-0"
-                title="加入当前专题">
-                +入集
-              </button>
+              <div class="flex items-center gap-1 flex-shrink-0 ml-1">
+                <button v-if="collectionStore.currentCollection && !isDocInCurrentCollection(d.id)"
+                  @click.stop="addToCollection(d)"
+                  class="text-xs text-green-400 hover:text-green-300 opacity-0 group-hover:opacity-100"
+                  title="加入当前专题">
+                  +入集
+                </button>
+              </div>
             </div>
             <div class="text-xs text-gray-500 mt-1">{{ d.results.length }} 行识别</div>
             <div v-if="isDocInCurrentCollection(d.id)" class="text-xs text-amber-400 mt-0.5">
@@ -97,6 +106,10 @@
           class="bg-green-800 text-green-200 px-2 py-1 rounded text-xs hover:bg-green-700">
           加入专题
         </button>
+        <span v-else-if="collectionStore.currentCollection && store.currentDoc && isDocInCurrentCollection(store.currentDoc.id)"
+          class="text-xs text-amber-400">
+          ✓ 已入专题
+        </span>
       </div>
       <div v-if="store.currentDoc" class="space-y-2">
         <div v-for="r in store.currentDoc.results" :key="r.id"
@@ -139,6 +152,7 @@ import { useOcrStore } from './store/ocr'
 import { useCollectionStore } from './store/collections'
 import ImageCanvas from './components/ImageCanvas.vue'
 import CollectionPanel from './components/CollectionPanel.vue'
+import type { Document } from './types'
 
 const store = useOcrStore()
 const collectionStore = useCollectionStore()
@@ -166,14 +180,14 @@ function doExportSingle() {
   URL.revokeObjectURL(url)
 }
 
-async function addToCollection(docId: string) {
+async function addToCollection(doc: Document) {
   if (!collectionStore.currentCollection) return
-  await collectionStore.addDocumentToCollection(collectionStore.currentCollection.id, docId)
+  await collectionStore.addDocumentToCollection(collectionStore.currentCollection.id, doc)
 }
 
 async function addCurrentToCollection() {
   if (!store.currentDoc || !collectionStore.currentCollection) return
-  await addToCollection(store.currentDoc.id)
+  await addToCollection(store.currentDoc)
 }
 
 function onLocateDocument(docId: string) {

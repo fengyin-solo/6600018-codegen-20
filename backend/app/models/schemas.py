@@ -57,6 +57,10 @@ class CollectionDocumentAdd(BaseModel):
     document_id: str
 
 
+class CollectionDocumentAddWithData(BaseModel):
+    document: Document
+
+
 class CollectionSearchResult(BaseModel):
     document_id: str
     document_name: str

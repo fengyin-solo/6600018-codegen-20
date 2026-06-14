@@ -44,27 +44,44 @@
             class="bg-gray-800 rounded p-2 text-xs cursor-pointer hover:bg-gray-700"
             @click="locateDocument(r.documentId)">
             <div class="text-gray-400">[{{ r.documentName }}]</div>
-            <div class="text-white mt-0.5">{{ highlight(r.result.text, localSearchQuery) }}</div>
+            <div class="text-white mt-0.5" v-html="highlight(r.result.text, localSearchQuery)"></div>
           </div>
+        </div>
+        <div v-if="localSearchQuery && !collectionStore.collectionSearchResults.length && !collectionStore.isLoading"
+          class="mt-1 text-xs text-gray-500">
+          未匹配到结果
         </div>
       </div>
 
       <div>
-        <h3 class="text-amber-300 font-bold text-sm mb-2">合集文档管理</h3>
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-amber-300 font-bold text-sm">合集文档 ({{ collectionDocs.length }})</h3>
+          <button v-if="ocrStore.currentDoc && !isCurrentDocInCollection"
+            @click="addCurrentDoc"
+            class="text-xs bg-green-800 text-green-200 px-2 py-0.5 rounded hover:bg-green-700">
+            + 当前文档
+          </button>
+        </div>
         <div class="space-y-1 max-h-32 overflow-y-auto mb-2">
           <div v-for="d in collectionDocs" :key="d.id"
             class="bg-gray-800 rounded p-2 text-xs flex justify-between items-center">
-            <span class="text-gray-300 truncate flex-1">{{ d.name }}</span>
-            <button @click="removeDoc(d.id)" class="text-red-400 hover:underline ml-2 flex-shrink-0">移除</button>
+            <span class="text-gray-300 truncate flex-1"
+              @click="locateDocument(d.id)"
+              title="点击定位此文档">
+              {{ d.name }}
+            </span>
+            <span class="text-gray-500 mx-2 flex-shrink-0">{{ d.results.length }}行</span>
+            <button @click="removeDoc(d.id)" class="text-red-400 hover:underline flex-shrink-0">移除</button>
           </div>
           <div v-if="!collectionDocs.length" class="text-gray-500 text-xs">
-            暂无文档，从左侧文档列表添加
+            暂无文档，请先选中专题再在"文档"标签中加入文档
           </div>
         </div>
       </div>
 
-      <button @click="doExport" class="w-full bg-green-700 py-2 rounded text-sm hover:bg-green-600">
-        导出合集 TEI/XML
+      <button @click="doExport" :disabled="collectionDocs.length === 0"
+        class="w-full bg-green-700 py-2 rounded text-sm hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed">
+        导出合集 TEI/XML ({{ collectionDocs.length }} 份)
       </button>
     </div>
 
@@ -127,9 +144,11 @@ const form = reactive({
   description: ''
 })
 
-const collectionDocs = computed(() => {
-  if (!collectionStore.currentCollection) return []
-  return ocrStore.documents.filter(d => collectionStore.currentCollection!.documentIds.includes(d.id))
+const collectionDocs = computed(() => collectionStore.collectionDocuments || [])
+
+const isCurrentDocInCollection = computed(() => {
+  if (!ocrStore.currentDoc || !collectionStore.currentCollection) return false
+  return collectionStore.currentCollection.documentIds.includes(ocrStore.currentDoc.id)
 })
 
 onMounted(() => {
@@ -138,13 +157,13 @@ onMounted(() => {
 
 watch(localSearchQuery, (q) => {
   if (collectionStore.currentCollection) {
-    collectionStore.searchInCollection(collectionStore.currentCollection.id, q, ocrStore)
+    collectionStore.searchInCollection(collectionStore.currentCollection.id, q)
   }
 })
 
 function doSearch() {
   if (collectionStore.currentCollection) {
-    collectionStore.searchInCollection(collectionStore.currentCollection.id, localSearchQuery.value, ocrStore)
+    collectionStore.searchInCollection(collectionStore.currentCollection.id, localSearchQuery.value)
   }
 }
 
@@ -196,6 +215,11 @@ function locateDocument(docId: string) {
   emit('locate-document', docId)
 }
 
+async function addCurrentDoc() {
+  if (!collectionStore.currentCollection || !ocrStore.currentDoc) return
+  await collectionStore.addDocumentToCollection(collectionStore.currentCollection.id, ocrStore.currentDoc)
+}
+
 async function doExport() {
   if (!collectionStore.currentCollection) return
   await collectionStore.exportCollectionTEI(
@@ -204,21 +228,28 @@ async function doExport() {
   )
 }
 
-function highlight(text: string, query: string) {
+function highlight(text: string, query: string): string {
   if (!query) return text
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx === -1) return text
+  const idx = String(text || '').toLowerCase().indexOf(query.toLowerCase())
+  if (idx === -1) return String(text || '')
+  const safe = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
   return (
-    text.slice(0, idx) +
-    '<mark class="bg-amber-500 text-black">' + text.slice(idx, idx + query.length) + '</mark>' +
-    text.slice(idx + query.length)
+    safe(String(text || '').slice(0, idx)) +
+    '<mark class="bg-amber-500 text-black rounded px-0.5">' +
+    safe(String(text || '').slice(idx, idx + query.length)) +
+    '</mark>' +
+    safe(String(text || '').slice(idx + query.length))
   )
 }
 
 defineExpose({
-  addCurrentDoc: async () => {
-    if (!collectionStore.currentCollection || !ocrStore.currentDoc) return
-    await collectionStore.addDocumentToCollection(collectionStore.currentCollection.id, ocrStore.currentDoc.id)
+  addCurrentDoc,
+  addDocumentWithData: async (doc: any) => {
+    if (!collectionStore.currentCollection) return
+    await collectionStore.addDocumentToCollection(collectionStore.currentCollection.id, doc)
   }
 })
 </script>

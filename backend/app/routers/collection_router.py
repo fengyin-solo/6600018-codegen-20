@@ -5,6 +5,7 @@ from app.models.schemas import (
     CollectionCreate,
     CollectionUpdate,
     CollectionDocumentAdd,
+    CollectionDocumentAddWithData,
     CollectionSearchResult,
     Document
 )
@@ -49,10 +50,42 @@ def delete_collection(collection_id: str):
 
 @router.post("/{collection_id}/documents", response_model=Collection)
 def add_document(collection_id: str, data: CollectionDocumentAdd):
-    collection = collection_service.add_document_to_collection(collection_id, data.document_id)
+    collection = collection_service.add_document_to_collection(
+        collection_id=collection_id,
+        document_id=data.document_id,
+    )
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
     return collection
+
+
+@router.post("/{collection_id}/documents/with-data", response_model=Collection)
+def add_document_with_data(collection_id: str, data: CollectionDocumentAddWithData):
+    collection = collection_service.add_document_to_collection(
+        collection_id=collection_id,
+        document_id=data.document.id,
+        document_data=data.document,
+    )
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
+
+
+@router.post("/documents/batch-sync", response_model=dict)
+def batch_sync_documents(docs: List[Document]):
+    for doc in docs:
+        collection_service.register_document(doc)
+    return {"synced": len(docs), "total_documents": len(collection_service.list_all_documents())}
+
+
+@router.post("/documents/register", response_model=Document)
+def register_document(doc: Document):
+    return collection_service.register_document(doc)
+
+
+@router.get("/documents/all", response_model=List[Document])
+def list_all_documents():
+    return collection_service.list_all_documents()
 
 
 @router.delete("/{collection_id}/documents/{document_id}", response_model=Collection)
@@ -63,17 +96,28 @@ def remove_document(collection_id: str, document_id: str):
     return collection
 
 
-@router.post("/documents/register", response_model=Document)
-def register_document(doc: Document):
-    return collection_service.register_document(doc)
-
-
 @router.get("/{collection_id}/documents", response_model=List[Document])
 def get_collection_documents(collection_id: str):
     collection = collection_service.get_collection(collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    return collection_service.get_collection_documents(collection_id)
+    docs = collection_service.get_collection_documents(collection_id)
+    return docs
+
+
+@router.get("/{collection_id}/documents/missing", response_model=dict)
+def get_missing_documents(collection_id: str):
+    collection = collection_service.get_collection(collection_id)
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    docs = collection_service.get_collection_documents(collection_id)
+    existing_ids = {d.id for d in docs}
+    missing = [did for did in collection.document_ids if did not in existing_ids]
+    return {
+        "total_ids": len(collection.document_ids),
+        "resolved": len(docs),
+        "missing_ids": missing
+    }
 
 
 @router.get("/{collection_id}/search", response_model=List[CollectionSearchResult])
@@ -91,6 +135,7 @@ def export_collection_tei(collection_id: str):
         raise HTTPException(status_code=404, detail="Collection not found")
     from fastapi.responses import PlainTextResponse
     collection = collection_service.get_collection(collection_id)
-    filename = f"collection_{collection.name.replace(' ', '_')}.xml"
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in collection.name)
+    filename = f"collection_{safe_name or collection_id}.xml"
     headers = {"Content-Disposition": f"attachment; filename={filename}"}
     return PlainTextResponse(tei, media_type="application/xml", headers=headers)
